@@ -13,7 +13,7 @@ nvm install --lts
 ```
 
 # 2. Fabric环境准备
-本文例子使用的是2台主机5个orderer节点进行的raft共识，组织数量为2个，底层网络采用docker swarm，具体请参考链接：[fabric使用raft共识多机部署方式](http://osa.foresealife.com/topic/1182/fabric%E4%BD%BF%E7%94%A8raft%E5%85%B1%E8%AF%86%E5%A4%9A%E6%9C%BA%E9%83%A8%E7%BD%B2%E6%96%B9%E5%BC%8F)
+本文例子使用的是2台主机5个orderer节点进行的raft共识，组织数量为2个，底层网络采用docker swarm，具体请参考链接：[fabric使用raft共识多机部署方式](https://github.com/alexwishes/fabricNodeSDK/blob/master/Fabric%E4%BD%BF%E7%94%A8Raft%E5%85%B1%E8%AF%86%E5%A4%9A%E6%9C%BA%E9%83%A8%E7%BD%B2%E6%96%B9%E5%BC%8F.MD)
 # 3. SDK细节详解
 ## 3.1 准备工作
 ### 3.1.1 生成CCP文件
