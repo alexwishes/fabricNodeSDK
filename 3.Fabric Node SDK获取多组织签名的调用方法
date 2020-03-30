@@ -1,0 +1,87 @@
+# 1. 背景
+在实际生产环境中，有些chaincode是需要多方共同签名才允许执行的，在这种情况下，我们就不能简单粗暴的按照[这篇文章](https://github.com/alexwishes/fabricNodeSDK/blob/master/2.%E5%9F%BA%E4%BA%8EFabric%20Node%20SDK%E8%B0%83%E7%94%A8%E6%99%BA%E8%83%BD%E5%90%88%E7%BA%A6(Fabric%201.4.6).MD)来调用了．
+# 2. 环境准备
+按照[Fabric使用Raft共识多机部署方式](https://github.com/alexwishes/fabricNodeSDK/blob/master/1.Fabric%E4%BD%BF%E7%94%A8Raft%E5%85%B1%E8%AF%86%E5%A4%9A%E6%9C%BA%E9%83%A8%E7%BD%B2%E6%96%B9%E5%BC%8F.MD)说明的方式进行基础环境部署，完成创建Channel，加入Channel，安装Chanicode的操作，在Instantiate的这步我们改变Policy规则，将OR改成AND：
+```
+peer chaincode instantiate -o orderer.bngrp.com:7050 --tls --cafile $ORDERER_CA -n mycc -v 1 -c '{"Args":["init","a","100","b","200"]}'  -P "AND('Org1MSP.member', 'Org2MSP.member')" -C mychannel
+```
+# 3. 调用代码
+完成环境准备后，我们安装的Chaincode现在是需要Org1和Org2的组织成员都完成背书后，才允许用户去调用，如果按照[这篇文章](https://github.com/alexwishes/fabricNodeSDK/blob/master/2.%E5%9F%BA%E4%BA%8EFabric%20Node%20SDK%E8%B0%83%E7%94%A8%E6%99%BA%E8%83%BD%E5%90%88%E7%BA%A6(Fabric%201.4.6).MD)的方法调用invoke.js的话，peer节点会提示签名错误的信息，在调用query.js查询结果的时候发现结果没有变化．直接上改造后的代码：
+```
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+'use strict';
+
+const { FileSystemWallet, Gateway } = require('fabric-network');
+const path = require('path');
+
+const ccpPath = path.resolve(__dirname, 'example', 'connection-org1.json');
+
+async function main() {
+    try {
+
+        // Create a new file system based wallet for managing identities.
+        const walletPath = path.join(process.cwd(), 'wallet');
+        const wallet = new FileSystemWallet(walletPath);
+        console.log(`Wallet path: ${walletPath}`);
+
+        // Check to see if we've already enrolled the user.
+        const userExists = await wallet.exists('example_user1');
+        if (!userExists) {
+            console.log('An identity for the user "example_user1" does not exist in the wallet');
+            console.log('Run the registerUser.js application before retrying');
+            return;
+        }
+
+        // Create a new gateway for connecting to our peer node.
+        const gateway = new Gateway();
+        await gateway.connect(ccpPath, { wallet, identity: 'example_user1', discovery: { enabled: true} });
+
+        // Get the network (channel) our contract is deployed to.
+        const network = await gateway.getNetwork('mychannel');
+
+        var channel = await network.getChannel();
+        var fabric_client = await gateway.getClient();
+
+        // 发起Proposal的参数
+        const proposalObj = {
+                targets: channel.getChannelPeers(),
+                chaincodeId: "mycc",
+                chaincodeVersion: "1",
+                chaincodeType: "golang",
+                txId: fabric_client.newTransactionID(true),
+//              fcn: "invoke",
+                args: ["a","b","1"],
+        };
+
+　　     //获取返回的Proposal结果，里面包含了各组织的签名信息
+        const proposalRes = await channel.sendTransactionProposal(proposalObj);
+
+        // Submit the specified transaction.
+　　    //将Proposal的返回值封装成需要的格式发送到链上
+        var rst = await channel.sendTransaction({
+                proposalResponses: proposalRes[0],
+                proposal: proposalRes[1]
+        });
+
+        console.log('Transaction has been submitted');
+
+        // Disconnect from the gateway.
+        await gateway.disconnect();
+
+    } catch (error) {
+        console.error(`Failed to submit transaction: ${error}`);
+        process.exit(1);
+    }
+}
+
+main();
+```
+# 4. 关键点解析
+之前我们的调用方法的过程是通过本组织的peer节点直接访问账本的，那时候设置的Policy是OR，意思是只要有任何一个组织签名完成，区块链就认可这个交易，如果设置为AND之后，意思是需要两个组织都签名，区块链才会认可，这个时候我们就需要将交易的提交过程分成2步：
+1. 提交Proposal
+2. 提交具体的交易信息
+
+代码中就是将这两步拆开分别来做，才能在第一步先获取各个组织的签名，然后才能让区块链接受该交易
