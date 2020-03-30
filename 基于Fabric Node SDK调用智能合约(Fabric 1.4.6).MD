@@ -566,7 +566,7 @@ async function main() {
 		chaincodeType: "golang",
 		txId: fabric_client.newTransactionID(true),
 		args: ["a","100","b","200"],
-		endorsementPolicy: {
+		"endorsement-policy": {
 			identities: [
 			    { role: { name: "member", mspId: "Org1MSP" }},
 			    { role: { name: "member", mspId: "Org2MSP" }}
